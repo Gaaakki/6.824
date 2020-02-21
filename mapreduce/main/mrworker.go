@@ -10,7 +10,7 @@ package main
 // Please do not change this file.
 //
 
-import "github.com/Gaaakki/mapreduce/mr"
+import "github.com/Gaaakki/6.824/mapreduce/mr"
 import "plugin"
 import "os"
 import "fmt"

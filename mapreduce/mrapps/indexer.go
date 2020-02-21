@@ -7,7 +7,7 @@ package main
 //
 
 import "fmt"
-import "../mr"
+import "github.com/Gaaakki/6.824/mapreduce/mr"
 
 import "strings"
 import "unicode"

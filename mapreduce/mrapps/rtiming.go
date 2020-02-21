@@ -7,7 +7,7 @@ package main
 // go build -buildmode=plugin rtiming.go
 //
 
-import "../mr"
+import "github.com/Gaaakki/6.824/mapreduce/mr"
 import "fmt"
 import "os"
 import "syscall"

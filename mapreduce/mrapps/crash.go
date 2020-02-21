@@ -8,7 +8,7 @@ package main
 // go build -buildmode=plugin crash.go
 //
 
-import "../mr"
+import "github.com/Gaaakki/6.824/mapreduce/mr"
 import crand "crypto/rand"
 import "math/big"
 import "strings"

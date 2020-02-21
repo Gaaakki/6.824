@@ -6,7 +6,7 @@ package main
 // go build -buildmode=plugin wc.go
 //
 
-import "github.com/Gaaakki/mapreduce/mr"
+import "github.com/Gaaakki/6.824/mapreduce/mr"
 import "unicode"
 import "strings"
 import "strconv"

@@ -12,20 +12,14 @@ import "net/http"
 type Master struct {
 	// Your definitions here.
 	sync.Mutex
+	nMap              int
 	nReduce           int
-	mapTaskNum        map[string]int
+	finishedMap       int
+	finishedReduce    int
+	mapTask           map[string]int
+	reduceTask        map[int]bool
 	inputFiles        []string
-	dealingFiles      []string
-	intermediateFiles []string
-	doneChannel       chan struct{}
-}
-
-type Task struct {
-	Phase       string
-	TaskNum     int
-	NReduce     int
-	DoneChannel chan struct{}
-	Filename    string
+	intermediateFiles []int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -43,14 +37,32 @@ func (m *Master) AskTask(args int, reply *Task) error {
 		m.inputFiles = m.inputFiles[1:]
 		reply.Phase = "Map"
 		reply.NReduce = m.nReduce
-		reply.TaskNum = m.mapTaskNum[file]
-		reply.DoneChannel = make(chan struct{})
+		reply.TaskNum = m.mapTask[file]
 		reply.Filename = file
+	} else if m.finishedMap < m.nMap {
+		reply.Phase = "Wait"
+	} else if len(m.intermediateFiles) > 0 {
+		reduceNum := m.intermediateFiles[0]
+		m.intermediateFiles = m.intermediateFiles[1:]
+		reply.Phase = "Reduce"
+		reply.NMap = m.nMap
+		reply.NReduce = m.nReduce
+		reply.TaskNum = reduceNum
+	} else if m.finishedReduce < m.nReduce {
+		reply.Phase = "Wait"
+	} else {
+		reply.Phase = "Done"
 	}
-
 	return nil
 }
 
+func (m *Master) FinishMap(filename string, reply *Task) error {
+	m.Lock()
+	defer m.Unlock()
+	m.mapTask[filename] = -1
+	m.finishedMap++
+	return nil
+}
 //
 // start a thread that listens for RPCs from worker.go
 //
@@ -73,13 +85,7 @@ func (m *Master) server() {
 func (m *Master) Done() bool {
 
 	// Your code here.
-	select {
-	case <-m.doneChannel:
-		return true
-	default:
-		return false
-	}
-
+	return m.finishedReduce == m.nReduce
 }
 
 //
@@ -89,12 +95,16 @@ func (m *Master) Done() bool {
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 	// Your code here.
+	m.nMap = len(files)
 	m.nReduce = nReduce
-	m.mapTaskNum = make(map[string]int)
-	m.doneChannel = make(chan struct{})
+	m.mapTask = make(map[string]int)
 	for idx, file := range files {
-		m.mapTaskNum[file] = idx
+		m.mapTask[file] = idx
 		m.inputFiles = append(m.inputFiles, file)
+	}
+	for i:= 0; i < nReduce; i++ {
+		m.intermediateFiles = append(m.intermediateFiles, i)
+		m.reduceTask[i] = false
 	}
 	m.server()
 	return &m
