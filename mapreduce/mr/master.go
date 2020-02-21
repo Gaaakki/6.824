@@ -32,6 +32,7 @@ func (m *Master) Done() bool {
 func (m *Master) checkMapFinished(file string) {
 	time.Sleep(time.Second * 10)
 	m.Lock()
+	defer m.Unlock()
 	if m.mapTask[file] != -1 {
 		m.inputFiles = append(m.inputFiles, file)
 	}
@@ -40,6 +41,7 @@ func (m *Master) checkMapFinished(file string) {
 func (m *Master) checkReduceFinished(reduceNum int) {
 	time.Sleep(time.Second * 10)
 	m.Lock()
+	defer m.Unlock()
 	if !m.reduceTask[reduceNum] {
 		m.intermediateFiles = append(m.intermediateFiles, reduceNum)
 	}
