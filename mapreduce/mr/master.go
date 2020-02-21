@@ -2,7 +2,9 @@ package mr
 
 import (
 	"sync"
+	"time"
 )
+
 
 type Master struct {
 	// Your definitions here.
@@ -27,6 +29,21 @@ func (m *Master) Done() bool {
 	return m.finishedReduce == m.nReduce
 }
 
+func (m *Master) checkMapFinished(file string) {
+	time.Sleep(time.Second * 10)
+	m.Lock()
+	if m.mapTask[file] != -1 {
+		m.inputFiles = append(m.inputFiles, file)
+	}
+}
+
+func (m *Master) checkReduceFinished(reduceNum int) {
+	time.Sleep(time.Second * 10)
+	m.Lock()
+	if !m.reduceTask[reduceNum] {
+		m.intermediateFiles = append(m.intermediateFiles, reduceNum)
+	}
+}
 //
 // create a Master.
 // main/mrmaster.go calls this function.

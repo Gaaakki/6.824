@@ -18,6 +18,7 @@ func (m *Master) AskTask(args int, reply *Task) error {
 		reply.NReduce = m.nReduce
 		reply.TaskNum = m.mapTask[file]
 		reply.Filename = file
+		go m.checkMapFinished(file)
 	} else if m.finishedMap < m.nMap {
 		reply.Phase = "Wait"
 	} else if len(m.intermediateFiles) > 0 {
@@ -27,6 +28,7 @@ func (m *Master) AskTask(args int, reply *Task) error {
 		reply.NMap = m.nMap
 		reply.NReduce = m.nReduce
 		reply.TaskNum = reduceNum
+		go m.checkReduceFinished(reduceNum)
 	} else if m.finishedReduce < m.nReduce {
 		reply.Phase = "Wait"
 	} else {
@@ -44,6 +46,10 @@ func (m *Master) FinishMap(filename string, reply *Task) error {
 }
 
 func (m *Master) FinishReduce(taskNum int, reply *Task) error {
+	for i:= 0; i < m.nMap; i++ {
+		intermediateFileName := intermediateFileName(i, taskNum)
+		os.Remove(intermediateFileName)
+	}
 	m.Lock()
 	defer m.Unlock()
 	m.reduceTask[taskNum] = true
