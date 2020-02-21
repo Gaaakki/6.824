@@ -37,6 +37,7 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.nMap = len(files)
 	m.nReduce = nReduce
 	m.mapTask = make(map[string]int)
+	m.reduceTask = make(map[int]bool)
 	for idx, file := range files {
 		m.mapTask[file] = idx
 		m.inputFiles = append(m.inputFiles, file)
