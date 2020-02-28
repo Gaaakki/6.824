@@ -8,7 +8,7 @@ package raft
 // test with the original before submitting.
 //
 
-import "../labrpc"
+import "github.com/Gaaakki/6.824/raft/labrpc"
 import "log"
 import "sync"
 import "testing"

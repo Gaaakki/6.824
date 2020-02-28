@@ -49,7 +49,7 @@ package labrpc
 //   pass svc to srv.AddService()
 //
 
-import "../labgob"
+import "github.com/Gaaakki/6.824/raft/labgob"
 import "bytes"
 import "reflect"
 import "sync"
