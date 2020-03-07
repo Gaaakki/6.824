@@ -183,6 +183,7 @@ func (cfg *config) start1(i int) {
 				}
 				_, prevok := cfg.logs[i][m.CommandIndex-1]
 				cfg.logs[i][m.CommandIndex] = v
+				//DPrintf("cfg.log: i : %d, comidx: %d, com: %v\n", i, m.CommandIndex, v)
 				if m.CommandIndex > cfg.maxIndex {
 					cfg.maxIndex = m.CommandIndex
 				}
@@ -370,6 +371,7 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 
 		cfg.mu.Lock()
 		cmd1, ok := cfg.logs[i][index]
+		//DPrintf("i: %d, command: %v\n", i, cmd1)
 		cfg.mu.Unlock()
 
 		if ok {

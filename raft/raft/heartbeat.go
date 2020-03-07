@@ -1,6 +1,8 @@
 package raft
 
-import "time"
+import (
+	"time"
+)
 
 const HEARTBEAT_INTERVAL = 100
 
@@ -21,20 +23,23 @@ func (rf *Raft) heartbeatTicker() {
 
 // 向除了自己之外的所有节点发送心跳
 func (rf * Raft) sendHeartBeat() {
+
 	for i:= 0; i < len(rf.peers); i++ {
 		if i != rf.me {
 			rf.mu.Lock()
-			args := &RequestAppendLogArgs {
+
+			args := &AppendEntriesArgs {
 				Term:         rf.currentTerm,
 				LeaderId:     rf.me,
-				PrevLogIndex: 0,
-				PrevLogTerm:  0,
-				Entries:      nil,
+				PrevLogIndex: rf.nextIndex[i] - 1,
+				PrevLogTerm:  rf.log[rf.nextIndex[i] - 1].Term,
+				Entries:      rf.log[rf.nextIndex[i]:],
 				LeaderCommit: rf.commitIndex,
 			}
-			reply := &RequestAppendLogReply{}
+			reply := &AppendEntriesReply{}
+
 			rf.mu.Unlock()
-			go rf.sendRequestAppendLog(i, args, reply)
+			go rf.sendAppendEntries(i, args, reply)
 		}
 	}
 }

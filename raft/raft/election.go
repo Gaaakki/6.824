@@ -21,22 +21,28 @@ type RequestVoteReply struct {
 
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	if args.Term > rf.currentTerm {
-		reply.VoteGranted = true
-		rf.status = FOLLOWER
-		rf.voteNum = 0
-		rf.votedFor = args.CandidateId
-		rf.currentTerm = args.Term
-		rf.lastHeartbeatTime = time.Now().UnixNano()
-	} else if args.Term < rf.currentTerm || (rf.votedFor != - 1 && rf.votedFor != args.CandidateId) {
+		rf.updateTermAndStatus(args.Term)
+	}
+
+	reply.Term = rf.currentTerm
+	localLastLogTerm := rf.log[len(rf.log) - 1].Term
+	if args.Term < rf.currentTerm {
+		DPrintf("this is NO.%d server, I refused vote request from %d, arg term = %d, my term = %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
+		reply.VoteGranted = false
+	} else if rf.votedFor != - 1 && rf.votedFor != args.CandidateId{
+		DPrintf("this is NO.%d server, I refused vote request from %d, I voted for %d\n", rf.me, args.CandidateId, rf.votedFor)
+		reply.VoteGranted = false
+	} else if args.LastLogTerm < localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex < len(rf.log) - 1) {
+		DPrintf("this is NO.%d server, I refused vote request from %d, arg log term = %d, my log term = %d, arg log idx = %d, my log idx = %d\n", rf.me, args.CandidateId, args.LastLogTerm, localLastLogTerm, args.LastLogIndex, len(rf.log) - 1)
 		reply.VoteGranted = false
 	} else {
-		reply.VoteGranted = true
-		rf.lastHeartbeatTime = time.Now().UnixNano()
 		rf.votedFor = args.CandidateId
+		rf.lastHeartbeatTime = time.Now().UnixNano()
+		reply.VoteGranted = true
+		rf.persist()
 	}
-	reply.Term = rf.currentTerm
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -51,10 +57,14 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	}
 	if reply.VoteGranted && rf.status == CANDIDATE {
 		rf.voteNum++
-		DPrintf("this is NO.%d server, voteNum = %d\n", rf.me, rf.voteNum)
 		if rf.voteNum > len(rf.peers)/2 {
+			//fmt.Printf("this is NO.%d server, I become the leader, the term is %d, my last idx = %d\n", rf.me, rf.currentTerm, len(rf.log) - 1)
 			rf.status = LEADER
 			rf.lastHeartbeatTime = time.Now().UnixNano()
+			for i := 0; i < len(rf.peers); i++ {
+				rf.nextIndex[i] = len(rf.log)
+				rf.matchIndex[i] = 0
+			}
 			go rf.sendHeartBeat()
 		}
 	}
@@ -67,8 +77,8 @@ func (rf *Raft) startElection() {
 	args := &RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: 0,
-		LastLogTerm:  0,
+		LastLogIndex: len(rf.log) - 1,
+		LastLogTerm:  rf.log[len(rf.log) - 1].Term,
 	}
 	rf.mu.Unlock()
 
@@ -97,6 +107,7 @@ func (rf *Raft) electionTicker() {
 			rf.votedFor = rf.me
 			rf.voteNum = 1
 			rf.lastHeartbeatTime = currentTime
+			rf.persist()
 			DPrintf("this is NO.%d server, start election,term = %d\n", rf.me, rf.currentTerm)
 			go rf.startElection()
 		}

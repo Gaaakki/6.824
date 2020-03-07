@@ -14,6 +14,9 @@ package raft
 //
 
 import (
+	"bytes"
+	"fmt"
+	"github.com/Gaaakki/6.824/raft/labgob"
 	"sync"
 	"time"
 )
@@ -50,6 +53,8 @@ const (
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
+	applyCh chan ApplyMsg
+
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
@@ -60,7 +65,7 @@ type Raft struct {
 	// Persistent state on all servers
 	currentTerm int
 	votedFor    int
-	voteNum 	int
+	voteNum     int
 	log         []Entry
 	status      int
 
@@ -92,12 +97,15 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.lastApplied)
+	e.Encode(rf.log)
+	//fmt.Println("write", rf.me, rf.currentTerm, rf.votedFor, rf.log )
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -109,17 +117,24 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var lastApplied int
+	var log []Entry
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&lastApplied) != nil ||
+		d.Decode(&log) != nil {
+		fmt.Printf("readPersist error")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.lastApplied = lastApplied
+		rf.log = log
+		//fmt.Println("read", rf.me, rf.currentTerm, rf.votedFor, rf.lastApplied, rf.log )
+	}
 }
 
 //
@@ -137,13 +152,48 @@ func (rf *Raft) readPersist(data []byte) {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
+	rf.mu.Lock()
+	index, term, isLeader := len(rf.log), rf.currentTerm, rf.status == LEADER
+	if isLeader {
 
-	// Your code here (2B).
+		newEntry := Entry{
+			Term:    term,
+			Command: command,
+		}
 
+		// leader 先自己写日志，改matchIndex是为了统计之后日志写成功的副本数
+		rf.log = append(rf.log, newEntry)
+		rf.persist()
+		rf.matchIndex[rf.me] = rf.nextIndex[rf.me]
+		rf.nextIndex[rf.me]++
+
+		// 分发新的条目
+		go rf.replicateEntries()
+	}
+	rf.mu.Unlock()
 	return index, term, isLeader
+}
+
+func (rf *Raft) replicateEntries() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	for i := 0; i < len(rf.peers); i++ {
+		if i != rf.me {
+
+			args := &AppendEntriesArgs{
+				Term:         rf.currentTerm,
+				LeaderId:     rf.me,
+				PrevLogIndex: rf.nextIndex[i] - 1,
+				PrevLogTerm:  rf.log[rf.nextIndex[i]-1].Term,
+				Entries:      rf.log[rf.nextIndex[i]:],
+				LeaderCommit: rf.commitIndex,
+			}
+			reply := &AppendEntriesReply{}
+
+			//DPrintf("NO.%d server send append entries to NO.%d server, current term is %d, the start idx = %v, Entries length = %d\n", rf.me, i, rf.currentTerm, rf.nextIndex[i], len(args.Entries))
+			go rf.sendAppendEntries(i, args, reply)
+		}
+	}
 }
 
 //
@@ -166,6 +216,7 @@ func (rf *Raft) updateTermAndStatus(newTerm int) {
 	rf.votedFor = -1
 	rf.currentTerm = newTerm
 	rf.lastHeartbeatTime = time.Now().UnixNano()
+	rf.persist()
 }
 
 //
@@ -185,13 +236,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+	rf.applyCh = applyCh
 
 	// Your initialization code here (2A, 2B, 2C).
 	rf.currentTerm = 0
 	rf.votedFor = -1
-	rf.voteNum = 0
+	rf.commitIndex = 0
+	rf.lastApplied = 0
 	rf.status = FOLLOWER
 	rf.lastHeartbeatTime = time.Now().UnixNano()
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
+	emptyEntry := Entry{
+		Term:    0,
+		Command: nil,
+	}
+	rf.log = append(rf.log, emptyEntry)
 
 	//DPrintf("this is NO.%d server, I'm new server\n", rf.me)
 	// initialize from state persisted before a crash
