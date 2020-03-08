@@ -14,7 +14,7 @@ func (rf *Raft) heartbeatTicker() {
 		}
 		rf.mu.Lock()
 		if rf.status == LEADER {
-			go rf.sendHeartBeat()
+			rf.sendHeartBeat()
 		}
 		rf.mu.Unlock()
 		time.Sleep(time.Millisecond * HEARTBEAT_INTERVAL)
@@ -26,7 +26,6 @@ func (rf * Raft) sendHeartBeat() {
 
 	for i:= 0; i < len(rf.peers); i++ {
 		if i != rf.me {
-			rf.mu.Lock()
 
 			args := &AppendEntriesArgs {
 				Term:         rf.currentTerm,
@@ -38,7 +37,6 @@ func (rf * Raft) sendHeartBeat() {
 			}
 			reply := &AppendEntriesReply{}
 
-			rf.mu.Unlock()
 			go rf.sendAppendEntries(i, args, reply)
 		}
 	}

@@ -168,15 +168,13 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.nextIndex[rf.me]++
 
 		// 分发新的条目
-		go rf.replicateEntries()
+		rf.replicateEntries()
 	}
 	rf.mu.Unlock()
 	return index, term, isLeader
 }
 
 func (rf *Raft) replicateEntries() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	for i := 0; i < len(rf.peers); i++ {
 		if i != rf.me {
 

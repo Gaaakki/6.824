@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"math"
 	"time"
 )
@@ -67,7 +68,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		truncateIndex++
 		newEntryIndex++
 	}
-	rf.log = rf.log[:truncateIndex]
+	if newEntryIndex < len(args.Entries) {
+		rf.log = rf.log[:truncateIndex]
+		DPrintf("this is NO.%d server, Synchronize with leader %d ,my last log is = %d\n", rf.me, args.LeaderId, len(rf.log)-1)
+	}
+
 
 	for i := newEntryIndex; i < len(args.Entries); i++ {
 		rf.log = append(rf.log, args.Entries[i])
@@ -78,7 +83,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.commitIndex = int(math.Min(float64(args.LeaderCommit), float64(len(rf.log)-1)))
 	for rf.lastApplied < rf.commitIndex {
 		rf.lastApplied++
-		//fmt.Printf("this is NO.%d server, append entries from %d success, start apply, apply log idx = %d, log term = %d, current term = %d\n", rf.me, args.LeaderId, rf.lastApplied, rf.log[rf.lastApplied].Term, rf.currentTerm)
+		fmt.Printf("this is NO.%d server, append entries from %d success, start apply, apply log idx = %d, log term = %d, current term = %d\n", rf.me, args.LeaderId, rf.lastApplied, rf.log[rf.lastApplied].Term, rf.currentTerm)
 		applyMsg := ApplyMsg{
 			CommandValid: true,
 			Command:      rf.log[rf.lastApplied].Command,
@@ -104,7 +109,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 
 	// 收到回复的 term 比自己当前的 term 大，转变为 follower
 	if reply.Term > rf.currentTerm {
-		//fmt.Printf("this is NO.%d server, my term = %d, NO.%d server has lager term: %d\n", rf.me, rf.currentTerm, server, reply.Term)
+		fmt.Printf("this is NO.%d server, my term = %d, NO.%d server has lager term: %d\n", rf.me, rf.currentTerm, server, reply.Term)
 		rf.updateTermAndStatus(reply.Term)
 		rf.mu.Unlock()
 		return
@@ -135,7 +140,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 				rf.commitIndex = rf.matchIndex[server]
 				for rf.lastApplied < rf.commitIndex {
 					rf.lastApplied++
-					//fmt.Printf("NO.%d server(leader), commitIndex = %d, commitTerm = %d, apply log idx = %d, log term = %d, current term = %d\n", rf.me, rf.commitIndex, rf.log[rf.commitIndex].Term, rf.lastApplied, rf.log[rf.lastApplied].Term, rf.currentTerm)
+					fmt.Printf("NO.%d server(leader), commitIndex = %d, commitTerm = %d, apply log idx = %d, log term = %d, current term = %d\n", rf.me, rf.commitIndex, rf.log[rf.commitIndex].Term, rf.lastApplied, rf.log[rf.lastApplied].Term, rf.currentTerm)
 					applyMsg := ApplyMsg{
 						CommandValid: true,
 						Command:      rf.log[rf.lastApplied].Command,
@@ -161,7 +166,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 			LeaderCommit: rf.commitIndex,
 		}
 		newReply := &AppendEntriesReply{}
-		//DPrintf("this is NO.%d server, retry to send Entries to %d, current term is %d, the start idx = %v\n", rf.me, server, rf.currentTerm, args.PrevLogIndex+1)
+		DPrintf("this is NO.%d server, retry to send Entries to %d, current term is %d, the start idx = %v\n", rf.me, server, rf.currentTerm, newArgs.PrevLogIndex+1)
 		go rf.sendAppendEntries(server, newArgs, newReply)
 	}
 	rf.mu.Unlock()

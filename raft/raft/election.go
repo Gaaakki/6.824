@@ -28,13 +28,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.Term = rf.currentTerm
 	localLastLogTerm := rf.log[len(rf.log) - 1].Term
 	if args.Term < rf.currentTerm {
-		DPrintf("this is NO.%d server, I refused vote request from %d, arg term = %d, my term = %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
+		DPrintf("this is NO.%d server, I refused vote for %d, arg term = %d, my term = %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
 		reply.VoteGranted = false
 	} else if rf.votedFor != - 1 && rf.votedFor != args.CandidateId{
-		DPrintf("this is NO.%d server, I refused vote request from %d, I voted for %d\n", rf.me, args.CandidateId, rf.votedFor)
+		DPrintf("this is NO.%d server, I refused vote for %d, I voted for %d\n", rf.me, args.CandidateId, rf.votedFor)
 		reply.VoteGranted = false
 	} else if args.LastLogTerm < localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex < len(rf.log) - 1) {
-		DPrintf("this is NO.%d server, I refused vote request from %d, arg log term = %d, my log term = %d, arg log idx = %d, my log idx = %d\n", rf.me, args.CandidateId, args.LastLogTerm, localLastLogTerm, args.LastLogIndex, len(rf.log) - 1)
+		DPrintf("this is NO.%d server, I refused vote for %d, arg log term = %d, my log term = %d, arg log idx = %d, my log idx = %d\n", rf.me, args.CandidateId, args.LastLogTerm, localLastLogTerm, args.LastLogIndex, len(rf.log) - 1)
 		reply.VoteGranted = false
 	} else {
 		rf.votedFor = args.CandidateId
@@ -55,7 +55,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	if reply.Term > rf.currentTerm {
 		rf.updateTermAndStatus(reply.Term)
 	}
-	if reply.VoteGranted && rf.status == CANDIDATE {
+	if reply.VoteGranted && rf.status == CANDIDATE && reply.Term == rf.currentTerm{
 		rf.voteNum++
 		if rf.voteNum > len(rf.peers)/2 {
 			//fmt.Printf("this is NO.%d server, I become the leader, the term is %d, my last idx = %d\n", rf.me, rf.currentTerm, len(rf.log) - 1)
@@ -73,14 +73,12 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 // 开始选举，选举时发送给各节点的参数是相同的
 func (rf *Raft) startElection() {
-	rf.mu.Lock()
 	args := &RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
 		LastLogIndex: len(rf.log) - 1,
 		LastLogTerm:  rf.log[len(rf.log) - 1].Term,
 	}
-	rf.mu.Unlock()
 
 	for i := 0; i < len(rf.peers); i++ {
 		if i != rf.me {
@@ -109,7 +107,7 @@ func (rf *Raft) electionTicker() {
 			rf.lastHeartbeatTime = currentTime
 			rf.persist()
 			DPrintf("this is NO.%d server, start election,term = %d\n", rf.me, rf.currentTerm)
-			go rf.startElection()
+			rf.startElection()
 		}
 		rf.mu.Unlock()
 		time.Sleep(time.Millisecond * CHECK_TIMEOUT_INTERVAL)
