@@ -7,6 +7,7 @@ import (
 
 const CHECK_TIMEOUT_INTERVAL = 50
 
+// 请求投票rpc的参数
 type RequestVoteArgs struct {
 	Term         int
 	CandidateId  int
@@ -14,6 +15,7 @@ type RequestVoteArgs struct {
 	LastLogTerm  int
 }
 
+// 请求投票rpc的返回值
 type RequestVoteReply struct {
 	Term        int
 	VoteGranted bool
@@ -26,15 +28,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	reply.Term = rf.currentTerm
-	localLastLogTerm := rf.log[len(rf.log) - 1].Term
+	localLastLogTerm := rf.log[len(rf.log)-1].Term
 	if args.Term < rf.currentTerm {
-		DPrintf("this is NO.%d server, I refused vote for %d, arg term = %d, my term = %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
+		DPrintf("NO.%d server, I refused vote for %d, args term = %d, my term = %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
 		reply.VoteGranted = false
-	} else if rf.votedFor != - 1 && rf.votedFor != args.CandidateId{
-		DPrintf("this is NO.%d server, I refused vote for %d, I voted for %d\n", rf.me, args.CandidateId, rf.votedFor)
+	} else if rf.votedFor != - 1 && rf.votedFor != args.CandidateId {
+		DPrintf("NO.%d server, I refused vote for %d, I voted for %d\n", rf.me, args.CandidateId, rf.votedFor)
 		reply.VoteGranted = false
-	} else if args.LastLogTerm < localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex < len(rf.log) - 1) {
-		DPrintf("this is NO.%d server, I refused vote for %d, arg log term = %d, my log term = %d, arg log idx = %d, my log idx = %d\n", rf.me, args.CandidateId, args.LastLogTerm, localLastLogTerm, args.LastLogIndex, len(rf.log) - 1)
+	} else if args.LastLogTerm < localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex < len(rf.log)-1) {
+		DPrintf("NO.%d server, I refused vote for %d, arg log term = %d, my log term = %d, arg log idx = %d, my log idx = %d\n", rf.me, args.CandidateId, args.LastLogTerm, localLastLogTerm, args.LastLogIndex, len(rf.log)-1)
 		reply.VoteGranted = false
 	} else {
 		rf.votedFor = args.CandidateId
@@ -47,25 +49,32 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	if !ok {
+
+	rf.mu.Lock()
+	// rpc调用失败或者返回值过期
+	if !ok || reply.Term != rf.currentTerm {
+		rf.mu.Unlock()
 		return
 	}
 
-	rf.mu.Lock()
+	// 返回值的term大于当前term，主动成为follower
 	if reply.Term > rf.currentTerm {
 		rf.updateTermAndStatus(reply.Term)
+		rf.mu.Unlock()
+		return
 	}
-	if reply.VoteGranted && rf.status == CANDIDATE && reply.Term == rf.currentTerm{
+
+	// 收到选票
+	if reply.VoteGranted && rf.status == CANDIDATE {
 		rf.voteNum++
 		if rf.voteNum > len(rf.peers)/2 {
-			//fmt.Printf("this is NO.%d server, I become the leader, the term is %d, my last idx = %d\n", rf.me, rf.currentTerm, len(rf.log) - 1)
+			DPrintf("NO.%d server become the leader, status is %v\n", rf.me, rf)
 			rf.status = LEADER
-			rf.lastHeartbeatTime = time.Now().UnixNano()
 			for i := 0; i < len(rf.peers); i++ {
 				rf.nextIndex[i] = len(rf.log)
 				rf.matchIndex[i] = 0
 			}
-			go rf.sendHeartBeat()
+			rf.sendHeartBeat()
 		}
 	}
 	rf.mu.Unlock()
@@ -77,7 +86,7 @@ func (rf *Raft) startElection() {
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
 		LastLogIndex: len(rf.log) - 1,
-		LastLogTerm:  rf.log[len(rf.log) - 1].Term,
+		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
 
 	for i := 0; i < len(rf.peers); i++ {
@@ -88,7 +97,7 @@ func (rf *Raft) startElection() {
 	}
 }
 
-// 每个50ms检查一次是否发生了选举超时或心跳超时
+// 每隔50ms检查一次是否发生了选举超时或心跳超时
 func (rf *Raft) electionTicker() {
 	rand.Seed(time.Now().UnixNano())
 	for {

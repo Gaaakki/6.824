@@ -17,14 +17,11 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Gaaakki/6.824/raft/labgob"
+	"github.com/Gaaakki/6.824/raft/labrpc"
 	"sync"
+	"sync/atomic"
 	"time"
 )
-import "sync/atomic"
-import "github.com/Gaaakki/6.824/raft/labrpc"
-
-// import "bytes"
-// import "../labgob"
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -188,7 +185,7 @@ func (rf *Raft) replicateEntries() {
 			}
 			reply := &AppendEntriesReply{}
 
-			//DPrintf("NO.%d server send append entries to NO.%d server, current term is %d, the start idx = %v, Entries length = %d\n", rf.me, i, rf.currentTerm, rf.nextIndex[i], len(args.Entries))
+			DPrintf("NO.%d server send append entries to NO.%d server, current term is %d, the start idx = %v, Entries length = %d\n", rf.me, i, rf.currentTerm, rf.nextIndex[i], len(args.Entries))
 			go rf.sendAppendEntries(i, args, reply)
 		}
 	}
@@ -213,7 +210,6 @@ func (rf *Raft) updateTermAndStatus(newTerm int) {
 	rf.voteNum = 0
 	rf.votedFor = -1
 	rf.currentTerm = newTerm
-	rf.lastHeartbeatTime = time.Now().UnixNano()
 	rf.persist()
 }
 
@@ -245,13 +241,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastHeartbeatTime = time.Now().UnixNano()
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
-	emptyEntry := Entry{
-		Term:    0,
-		Command: nil,
-	}
-	rf.log = append(rf.log, emptyEntry)
+	rf.log = append(rf.log, Entry{Term:0})
 
-	//DPrintf("this is NO.%d server, I'm new server\n", rf.me)
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 	go rf.heartbeatTicker()
